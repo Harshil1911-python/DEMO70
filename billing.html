@@ -2083,7 +2083,10 @@ function openModal(id){
 }
 function closeModal(id){
   var el = document.getElementById(id);
-  if(el) el.classList.remove("open");
+  if(el){
+    el.classList.remove("open");
+    if(id === "postInvoiceModal") el.style.display = "";
+  }
 }
 function toast(t){ const el=document.getElementById("toast"); el.textContent=t; el.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.remove("show"),2200); }
 
@@ -2188,17 +2191,40 @@ async function prepareAndOpenInvoiceShare(fmt){
 
 /** After invoice create: simple popup Share / Download / Preview / Cancel */
 function openPostInvoiceActions(){
-  if(!lastInvoicePayload){ toast("No invoice"); return; }
-  const sub = document.getElementById("postInvoiceSub");
-  if(sub){
-    const phone = (typeof clientPhoneForSale === "function") ? clientPhoneForSale() : "";
-    const clientLabel = lastInvoicePayload.clientName || "Walk-in";
-    sub.textContent = (lastInvoicePayload.invoiceNumber || "Invoice") + " · " + money(lastInvoicePayload.total) + " · " + clientLabel +
-      (phone ? (" · WA " + phone) : "");
+  try{
+    var el = document.getElementById("postInvoiceModal");
+    if(!el){
+      console.warn("postInvoiceModal missing from DOM");
+      toast("Invoice saved");
+      try{ openModal("exportModal"); }catch(e){}
+      return;
+    }
+    try{
+      var sub = document.getElementById("postInvoiceSub");
+      if(sub && lastInvoicePayload){
+        var phone = "";
+        try{ if(typeof clientPhoneForSale === "function") phone = clientPhoneForSale() || ""; }catch(ePh){}
+        var clientLabel = lastInvoicePayload.clientName || "Walk-in";
+        var invLabel = lastInvoicePayload.invoiceNumber || "Invoice";
+        var totLabel = (typeof money === "function") ? money(lastInvoicePayload.total) : String(lastInvoicePayload.total || "");
+        sub.textContent = invLabel + " · " + totLabel + " · " + clientLabel + (phone ? (" · WA " + phone) : "");
+      } else if(sub){
+        sub.textContent = "Invoice created";
+      }
+    }catch(eSub){ console.warn(eSub); }
+    try{
+      var msg = document.getElementById("postInvoiceMsg");
+      if(msg){ msg.textContent = ""; msg.className = "msg"; }
+    }catch(eMsg){}
+    // Force-open (openModal + direct class) so it always shows
+    try{ openModal("postInvoiceModal"); }catch(eOm){}
+    el.classList.add("open");
+    el.style.display = "flex";
+    try{ toast("Invoice ready"); }catch(eT){}
+  }catch(eAll){
+    console.error("openPostInvoiceActions", eAll);
+    try{ openModal("exportModal"); }catch(e2){}
   }
-  const msg = document.getElementById("postInvoiceMsg");
-  if(msg){ msg.textContent = ""; msg.className = "msg"; }
-  openModal("postInvoiceModal");
 }
 
 async function postInvoiceBuildPngBlob(){
@@ -3388,14 +3414,24 @@ async function finalizeSale(payload, doPrint){
   try{ playInvoiceSuccessSound(); }catch(e){}
   try{ if(typeof window.__orbitUpdateWakeLock==="function") window.__orbitUpdateWakeLock(); }catch(e){}
   try{
-    if(doPrint) printLast();
-    else {
-      // After creating invoice: show Share / Download / Preview / Cancel popup
-      try{
-        openPostInvoiceActions();
-      }catch(ePost){
-        try{ openModal("exportModal"); }catch(e2){}
-      }
+    if(doPrint){
+      printLast();
+    } else {
+      // After creating invoice: always show Share / Download / Preview / Cancel
+      setTimeout(function(){
+        try{
+          if(typeof openPostInvoiceActions === "function"){
+            openPostInvoiceActions();
+          } else {
+            var m = document.getElementById("postInvoiceModal");
+            if(m){ m.classList.add("open"); m.style.display = "flex"; }
+            else { try{ openModal("exportModal"); }catch(e3){} }
+          }
+        }catch(ePost){
+          console.error("post invoice popup", ePost);
+          try{ openModal("exportModal"); }catch(e2){}
+        }
+      }, 120);
     }
   }catch(e){
     console.error(e);
